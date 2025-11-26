@@ -1,0 +1,84 @@
+import logging
+import json
+import sys
+from pythonjsonlogger import jsonlogger 
+# Importamos la función de aplanamiento para el ejemplo
+from typing import Dict, Any
+
+# Lista de campos que queremos en el JSON final
+FIELDS_TO_INCLUDE = [
+    'timestamp', 'levelname', 'session_id', 'event_type', 'severity', 
+    'service', 'host', 'src', 'http', 'detection', 'meta'
+]
+
+def setup_security_logger(path='security_events.jsonl'):
+    logger = logging.getLogger('security_log')
+    logger.setLevel(logging.INFO)
+    
+    # 1. Simplificar el Formateador: Usar el constructor con la lista de campos
+    # Esto asegura que SÓLO estos campos aparezcan en el JSON
+    formatter = jsonlogger.JsonFormatter(
+        ' '.join([f'%({field})s' for field in FIELDS_TO_INCLUDE]),
+        rename_fields={'levelname': 'severity'} # Mapea 'levelname' a 'severity' en el JSON
+    )
+
+    # 2. File handler (JSON lines)
+    fh = logging.FileHandler(path)
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+    
+    # 3. Stdout handler (para contenedores)
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setFormatter(formatter)
+    logger.addHandler(sh)
+    
+    # Configurar el nivel base para los handlers si es necesario
+    fh.setLevel(logging.INFO)
+    sh.setLevel(logging.INFO)
+    
+    return logger
+
+SECURITY_LOG = setup_security_logger()
+
+# --- Ejemplo de Uso (Aplanando la estructura) ---
+def log_event_with_json_logger(log_entry: Dict[str, Any]):
+    """
+    Toma el diccionario estructurado (tu esquema) y lo pasa al logger, 
+    usando las variables clave en 'extra'.
+    """
+    
+    # Prepara el diccionario 'extra' para python-json-logger
+    extra_fields = {
+        'session_id': log_entry['session_id'],
+        'event_type': log_entry['event_type'],
+        'severity': log_entry['severity'], # Usado para el mapeo
+        'service': log_entry['service'],
+        'host': log_entry['host'],
+        'src': log_entry['src'],
+        'http': log_entry['http'],
+        'detection': log_entry['detection'],
+        'meta': log_entry['meta']
+    }
+    
+    # El mensaje principal ('msg') puede ser un string simple si no quieres que aparezca
+    # o puede dejarse vacío. jsonlogger gestiona el resto.
+    SECURITY_LOG.info("Event captured", extra=extra_fields)
+
+
+# Ejemplo de tu esquema (simulado)
+sample_log = {
+    "timestamp":"2025-11-26T14:23:05.900Z", # Ignorado por jsonlogger, que usa su propio asctime
+    "event_type":"DECOY_HIT",
+    "severity":"INFO",
+    "service":"sguri-decoy",
+    "host":"decoy-runner-7",
+    "session_id":"f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "src":{"ip":"189.22.11.33"},
+    "http":{"method":"POST","path":"/decoy/...", "status_code":200,"user_agent":"python-requests/2.28"},
+    "detection":{"reason":"DECOY_HIT","hmac_valid":False},
+    "meta":{"actions":["issued_move_command"]}
+}
+
+# Ejecución de prueba
+# log_event_with_json_logger(sample_log) 
+# Este proceso generaría un log JSON correcto y estandarizado.
