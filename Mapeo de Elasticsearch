@@ -1,0 +1,64 @@
+PUT /sguri-logs-*/_mapping
+{
+  "properties": {
+    "timestamp": {
+      "type": "date"
+    },
+    "event_type": {
+      "type": "keyword"
+    },
+    "severity": {
+      "type": "keyword"
+    },
+    "service": {
+      "type": "keyword"
+    },
+    "host": {
+      "type": "keyword"
+    },
+    "session_id": {
+      "type": "keyword"
+    },
+    
+    "src": {
+      "properties": {
+        "ip": { "type": "ip" },
+        "geo": { 
+          "properties": {
+            "country": { "type": "keyword" }
+          }
+        }
+      }
+    },
+    
+    "http": {
+      "properties": {
+        "method": { "type": "keyword" },
+        "path": { "type": "keyword" },
+        "status_code": { "type": "integer" },
+        "user_agent": { 
+          "type": "text", 
+          "fields": {
+            "keyword": { "type": "keyword", "ignore_above": 256 }
+          }
+        }
+      }
+    },
+    
+    "detection": {
+      "properties": {
+        "reason": { "type": "keyword" },
+        "hmac_valid": { "type": "boolean" },
+        "timestamp_diff_s": { "type": "float" }
+      }
+    },
+    
+    "meta": {
+      "properties": {
+        "payload_len": { "type": "long" },
+        "payload_hash": { "type": "keyword" },
+        "artifact_saved": { "type": "keyword" }
+      }
+    }
+  }
+}
