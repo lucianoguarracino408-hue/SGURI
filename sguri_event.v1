@@ -1,0 +1,90 @@
+{
+  "timestamp": "ISO8601",        // e.g. 2025-11-26T14:23:01.123Z
+  "event_type": "string",        // e.g. "SUSPECT_ACCESS", "DECOY_HIT", "AUTH_SUCCESS"
+  "severity": "INFO|WARN|ERROR|CRITICAL",
+  "service": "sguri-api",        // componente
+  "host": "fqdn-or-id",
+  "session_id": "uuid-or-null",
+  "src": {
+    "ip": "x.x.x.x",
+    "geo": {"country": "AR", "region": "CABA"}  // opcional
+  },
+  "http": {
+    "method": "POST",
+    "path": "/command",
+    "status_code": 307,
+    "user_agent": "curl/7.8"
+  },
+  "detection": {
+    "reason": "HMAC_FAIL",
+    "hmac_valid": false,
+    "timestamp_diff_s": 320
+  },
+  "meta": {}                     // campo libre para extensiones
+}
+from datetime import datetime, timezone # Nueva importación para timestamp ISO8601
+# ... resto de importaciones
+
+def log_suspect(req: request, reason: str = "HMAC_FAIL", status_code: int = 307) -> str:
+    """Construye y registra el acceso sospechoso en el esquema JSON."""
+    session_id = str(uuid.uuid4())
+    current_time = time.time()
+    ts = req.headers.get('X-Timestamp', '0')
+    ts_float = float(ts) if ts.isdigit() else current_time
+    
+    # --- Construcción del Objeto Log ---
+    
+    log_entry = {
+        # 1. Metadatos de tiempo y evento
+        "timestamp": datetime.fromtimestamp(current_time, tz=timezone.utc).isoformat().replace('+00:00', 'Z'),
+        "event_type": "SUSPECT_ACCESS" if reason == "HMAC_FAIL" else "DECOY_HIT",
+        "severity": "WARNING" if reason == "HMAC_FAIL" else "INFO", # Un fallo HMAC es una advertencia
+        "service": "api-decoy-service", 
+        "host": os.environ.get('HOSTNAME', 'localhost'), # Usa variable de entorno para el host
+        "session_id": session_id,
+        
+        # 2. Información de Origen (Source)
+        "src": {
+            "ip": req.remote_addr,
+            # Placeholder para Geo, podrías usar una biblioteca como GeoLite2 aquí
+            "geo": {"country": "N/A", "region": "N/A"}
+        },
+        
+        # 3. Información HTTP
+        "http": {
+            "method": req.method,
+            "path": req.path,
+            "status_code": status_code,
+            "user_agent": req.headers.get('User-Agent'),
+            "hmac_sig": req.headers.get('X-Signature', 'MISSING')
+        },
+        
+        # 4. Detección (Contexto de Seguridad)
+        "detection": {
+            "reason": reason,
+            # Ejemplo para el log de fallo de HMAC (el código no falla por diff > 300)
+            "hmac_valid": False, 
+            "timestamp_diff_s": round(abs(current_time - ts_float), 1) if ts_float != 0 else None,
+            "payload_start": req.get_data()[:100].decode(errors='ignore') if req.get_data() else None
+        },
+        "meta": {}
+    }
+    
+    # El método 'info' pasa el diccionario log_entry como el mensaje ('msg')
+    SECURITY_LOG.info(log_entry)
+    return session_id# Dentro de @app.route('/command', methods=['POST'])
+# ...
+    # Estrategia de evasión: Retardo + Redirección a señuelo
+    time.sleep(DECOY_DELAY_SECONDS)
+    # Pasar 307 como status_code
+    sid = log_suspect(request, status_code=307) 
+    
+    decoy_url = url_for('decoy', sid=sid, _external=True)
+    return redirect(decoy_url, code=307)
+# ...
+
+# Dentro de @app.route('/decoy/<sid>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+# ...
+    # Registrar la interacción con el señuelo, pasamos 200
+    log_suspect(request, reason="DECOY_HIT", status_code=200)
+# ...
