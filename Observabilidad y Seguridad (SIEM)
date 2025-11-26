@@ -1,0 +1,34 @@
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/sguri/security_events.jsonl
+  json.keys_under_root: true
+  json.add_error_key: true
+  
+ MEJORA 1: Procesadores ---
+  processors:
+    - add_fields:
+        target: ''
+        fields:
+          # Identificador del entorno para búsqueda rápida
+          environment: "production" 
+          # Identificador del componente de seguridad
+          service_name: "sguri-decoy-api"
+(filebeat.inputs sigue igual)
+
+MEJORA 2: Configuración de Salida Moderna ---
+output.elasticsearch: 
+        data_stream.namespace: sguri-security
+  
+  # Si el log es JSON, a menudo quieres evitar que Filebeat añada un campo 'message' redundante
+  # Esto se hace mejor con un procesador, pero lo añadimos por si acaso.
+  # output.elasticsearch.keep_null: false # Buena práctica para logs estructurados
+  
+  hosts: ["https://es.example:9200"]
+  # ... (resto de credenciales)
+output.elasticsearch:
+  hosts: ["https://es.example:9200"]
+  username: "filebeat"
+  # --- MEJORA 3: Referencia al Keystore ---
+  password: "${ES_PASSWORD}"
