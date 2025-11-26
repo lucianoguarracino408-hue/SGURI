@@ -1,0 +1,33 @@
+"aggs":{
+    "by_ip":{
+      "terms":{
+        "field":"src.ip",
+        "size":100 // Aumentamos el tamaño para asegurarnos de capturar IPs fuera del top 10
+      },
+      "aggs":{
+        "hit_count":{"value_count":{"field":"session_id"}}, // Contamos el número de hits por IP
+        "ip_over_threshold":{
+          "bucket_selector":{
+            "buckets_path":{"count":"hit_count"}, // Le damos un alias 'count' al resultado de value_count
+            "script": "params.count >= 20" // Aplicamos la condición: count > 20
+          }
+        }
+      }
+    }
+  }{
+  "query": {
+    "bool": {
+      "must": [
+        {"term":{"event_type":"SUSPECT_ACCESS"}},
+        {"term":{"detection.reason":"HMAC_FAIL"}},
+        {"term":{"http.path":"/command"}}
+      ],
+      "filter": {
+        "range": {"timestamp": {"gte":"now-10m"}}
+      }
+    }
+  },
+  "aggs":{
+    "by_ip":{"terms":{"field":"src.ip","size":10}}
+  }
+}
