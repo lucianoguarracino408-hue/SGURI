@@ -1,0 +1,13 @@
+{
+  "timestamp":"2025-11-26T14:23:05.900Z",
+  "event_type":"DECOY_HIT",
+  "severity":"INFO",
+  "service":"sguri-decoy",
+  "host":"decoy-runner-7",
+  "session_id":"f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "src":{"ip":"189.22.11.33"},
+  "http":{"method":"POST","path":"/decoy/...", "status_code":200,"user_agent":"python-requests/2.28"},
+  "detection":{"reason":"DECOY_HIT","hmac_valid":false},
+  "meta":{"actions":["issued_move_command","queried_status"], "artifact_saved":"s3://sguri-decoy/f47ac10b.trace"}
+}
+
