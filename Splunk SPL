@@ -1,0 +1,7 @@
+index=sguri_logs event_type="SUSPECT_ACCESS" detection.reason="HMAC_FAIL" http.path="/command" 
+| eval abs_time_diff=abs(now() - _time) 
+| where detection.timestamp_diff_s < 300 OR isnull(detection.timestamp_diff_s) 
+| bin _time span=10m
+| stats count by _time, src.ip
+| where count > 20
+| sort - count desc
