@@ -38,7 +38,3 @@ A través del *middleware* `apply_security_headers`, proteges activamente a los 
 
 * **`X-Frame-Options: DENY`:** Previene **Clickjacking**, asegurando que el contenido no pueda ser incrustado en *iframes* maliciosos.
 * **`X-Content-Type-Options: nosniff`:** Evita que el navegador **adivine o "huela" (*sniff*) el tipo de contenido** (MIME type), lo que previene ciertos ataques de *Cross-Site Scripting* (XSS).
-
-En resumen, tu código representa un sistema moderno de **Defensa Proactiva** que prioriza **engañar al atacante** para obtener inteligencia sobre amenazas, en lugar de simplemente bloquearlo, todo ello respaldado por un **sólido pilar de observabilidad estructurada**.
-
-¿Te gustaría que te ayudara a generar un comando de ejemplo para probar la funcionalidad HMAC de este nuevo código?
