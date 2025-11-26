@@ -1,0 +1,127 @@
+import os
+import hmac
+import hashlib
+import time
+import json
+import logging
+import uuid
+from typing import Dict, Any, Union
+from flask import Flask, request, jsonify, redirect, url_for, make_response, Response
+
+# --- Configuración y Logging (Modular y Estructurado) ---
+# Mejor práctica: Leer secretos de variables de entorno
+SHARED_SECRET = os.environ.get('APP_SECRET', 'super_secret_key').encode('utf-8')
+HMAC_TOLERANCE_SECONDS = 300
+DECOY_DELAY_SECONDS = 2.5 # Retardo avanzado para simular procesamiento y evadir automatización
+
+# Configuración del Logger Estructurado (para ingesta en SIEM/SOC)
+def setup_security_logger():
+    class JsonFormatter(logging.Formatter):
+        def format(self, record):
+            log_entry = {
+                "timestamp": self.formatTime(record, self.datefmt),
+                "level": record.levelname,
+                "event_type": getattr(record, 'event_type', 'GENERAL_LOG'),
+                "message": record.getMessage(),
+                **getattr(record, 'custom_fields', {})
+            }
+            return json.dumps(log_entry)
+
+    logger = logging.getLogger('security_log')
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler('security_events.jsonl')
+    handler.setFormatter(JsonFormatter())
+    logger.addHandler(handler)
+    return logger
+
+SECURITY_LOG = setup_security_logger()
+
+app = Flask(__name__)
+
+# --- Funciones de Seguridad (Lógica de Decoy) ---
+
+def verify_hmac(body: bytes, signature: str, timestamp: str) -> bool:
+    """Verifica integridad HMAC y ventana de tiempo."""
+    try:
+        ts_float = float(timestamp)
+        # 1. Validación de ventana de tiempo
+        if abs(time.time() - ts_float) > HMAC_TOLERANCE_SECONDS:
+            return False
+    except ValueError:
+        return False
+
+    # 2. Cálculo y comparación del HMAC
+    msg = timestamp.encode() + b'.' + body
+    computed = hmac.new(SHARED_SECRET, msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, signature)
+
+def log_suspect(req: request, reason: str = "HMAC_FAIL") -> str:
+    """Registra acceso sospechoso con formato estructurado."""
+    session_id = str(uuid.uuid4())
+    extra_data = {
+        "session_id": session_id,
+        "ip": req.remote_addr,
+        "user_agent": req.headers.get('User-Agent'),
+        "path": req.path,
+        "method": req.method,
+        "reason": reason,
+        "payload_len": len(req.get_data()),
+        # Se registra solo el inicio del payload por seguridad de datos, y si existe
+        "payload_start": req.get_data()[:100].decode(errors='ignore') if req.get_data() else None 
+    }
+    
+    SECURITY_LOG.info("Suspicious access detected", extra={'custom_fields': extra_data, 'event_type': 'SUSPECT_ACCESS'})
+    return session_id
+
+# --- Middlewares y Helpers ---
+
+def set_security_headers(response: Response) -> Response:
+    """Añade encabezados de seguridad modernos (Tendencia 2026)."""
+    # Previene Clickjacking
+    response.headers['X-Frame-Options'] = 'DENY' 
+    # Previene XSS
+    response.headers['X-Content-Type-Options'] = 'nosniff' 
+    # Control estricto de HTTPS (HSTS)
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains' 
+    # No cachear el contenido de la API
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+    return response
+
+# Hook para aplicar los encabezados a todas las respuestas
+@app.after_request
+def apply_security_headers(response):
+    return set_security_headers(response)
+
+# --- Endpoints ---
+
+@app.route('/command', methods=['POST'])
+def command():
+    """Endpoint de comando legítimo y de seguridad."""
+    sig = request.headers.get('X-Signature', '')
+    ts = request.headers.get('X-Timestamp', '0')
+    body = request.get_data() or b''
+
+    if verify_hmac(body, sig, ts):
+        # Respuesta legítima (cuerpo de la aplicación)
+        return jsonify({"status": "ok", "msg": "comando ejecutado exitosamente"}), 200
+
+    # Estrategia de evasión: Retardo + Redirección a señuelo
+    time.sleep(DECOY_DELAY_SECONDS)
+    sid = log_suspect(request)
+    
+    decoy_url = url_for('decoy', sid=sid, _external=True)
+    # 307 Temporal Redirect para mantener el método (POST) en algunos casos
+    return redirect(decoy_url, code=307)
+
+
+@app.route('/decoy/<sid>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def decoy(sid):
+    """Zona señuelo: simula un servicio legítimo con datos falsos."""
+    log_suspect(request, reason="DECOY_HIT") # Registrar la interacción con el señuelo
+
+    fake_data = {
+        "api_version": "v3.1.2-beta",
+        "device_id": "DECOY_NODE_{}".format(sid[:8]),
+        "status": "Ready",
+        "controls_available": ["get_metrics", "update_config"],
+        "telemetry": {"temp": 45, "load": 0.8
