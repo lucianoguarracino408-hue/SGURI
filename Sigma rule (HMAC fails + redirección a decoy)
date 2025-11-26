@@ -1,0 +1,41 @@
+# ...
+detection:
+  selection_active_attack:
+    event_type: "SUSPECT_ACCESS"
+    detection.reason: "HMAC_FAIL"
+    http.path: "/command"
+    # Filtrar solo si la diferencia de tiempo es menor que 300s (ataque "fresco")
+    detection.timestamp_diff_s: "< 300" 
+  
+  # La condición cambiaría a: selection_active_attack | count(session_id) by src.ip > 20
+title: Force Brute Success in Decoy
+id: 12345678-90ab-cdef-1234-567890abcdef-CORREL
+status: stable
+description: Detect high HMAC failures followed by successful interaction with decoy endpoints.
+logsource:
+  product: webserver
+detection:
+  # A: Detección de la fuerza bruta inicial (la regla que ya tienes)
+  initial_brute:
+    event_type: "SUSPECT_ACCESS"
+    detection.reason: "HMAC_FAIL"
+    http.path: "/command"
+    timeframe: 10m
+    condition: initial_brute | count(session_id) by src.ip > 20
+    
+  # B: Detección de la interacción con el señuelo
+  decoy_interaction:
+    event_type: "DECOY_HIT"
+    src.ip: "*" # Cualquier IP que llegó aquí
+    # Se puede añadir un filtro por acciones si el log es más detallado
+    
+  # Condición: El evento B ocurre poco después del evento A, usando la misma IP
+  condition: initial_brute and decoy_interaction by src.ip
+  
+timeframe: 30m # Ventana más amplia para ver la secuencia
+level: critical # Mayor nivel, ¡porque ya tienes telemetría de su actividad!
+fields:
+  - src.ip
+  - http.user_agent
+  - session_id
+  - detection.timestamp_diff_s # Para entender si fue un replay
